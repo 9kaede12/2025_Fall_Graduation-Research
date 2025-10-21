@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 import ipaddress
 from typing import Dict, Iterable, Optional
 
@@ -174,6 +174,9 @@ class EthernetSwitch:
         self.line_console = LineConfig(name="console 0")
         self.line_vty = LineConfig(name="vty 0 4")
         self.vlans: Dict[int, Vlan] = {1: Vlan(1, "default")}
+        self.stp_mode: str = "rapid-pvst"
+        self.stp_vlan_priority: Dict[int, int] = {}
+        self.port_portfast: Dict[str, bool] = {port: False for port in ports}
 
     # ------------------------------------------------------------------
     # 設定ヘルパー
@@ -203,6 +206,14 @@ class EthernetSwitch:
         port_obj = self._require_port(port)
         port_obj.mode = normalized
         self._log(f"Port {port} mode set to {normalized}")
+
+    def set_port_portfast(self, port: str, enabled: bool) -> None:
+        port_obj = self._require_port(port)
+        if port_obj.mode != "access" and enabled:
+            raise ValueError("portfast is only valid on access ports")
+        self.port_portfast[port] = enabled
+        state = "enabled" if enabled else "disabled"
+        self._log(f"Port {port} spanning-tree portfast {state}")
 
     def set_hostname(self, hostname: str) -> None:
         if not hostname:
@@ -305,6 +316,25 @@ class EthernetSwitch:
         vlan_obj.name = name
         self._log(f"VLAN {vlan} named {name}")
 
+    def set_stp_mode(self, mode: str) -> None:
+        normalized = mode.lower()
+        if normalized not in {"rapid-pvst"}:
+            raise ValueError("only rapid-pvst mode is supported")
+        self.stp_mode = normalized
+        self._log(f"Spanning-tree mode set to {normalized}")
+
+    def set_stp_vlan_priority(self, vlan: int, priority: int) -> None:
+        if vlan <= 0:
+            raise ValueError("VLAN IDs must be positive integers")
+        if priority < 0 or priority > 61440 or priority % 4096 != 0:
+            raise ValueError("priority must be between 0 and 61440 in steps of 4096")
+        self.ensure_vlan(vlan)
+        self.stp_vlan_priority[vlan] = priority
+        self._log(f"Spanning-tree VLAN {vlan} priority set to {priority}")
+
+    def port_portfast_enabled(self, port: str) -> bool:
+        return self.port_portfast.get(port, False)
+
     # ------------------------------------------------------------------
     # 運用ヘルパー
     # ------------------------------------------------------------------
@@ -328,7 +358,7 @@ class EthernetSwitch:
         entry = self.mac_table.get(frame.src_mac)
         if entry is None or entry.port != ingress_port or entry.vlan != port.vlan:
             self.mac_table[frame.src_mac] = MacTableEntry(
-                vlan=port.vlan, port=ingress_port, learned_at=datetime.utcnow()
+                vlan=port.vlan, port=ingress_port, learned_at=datetime.now(UTC)
             )
             self._log(
                 f"Learned {frame.src_mac} on {ingress_port} (VLAN {port.vlan})"
@@ -480,6 +510,9 @@ class EthernetSwitch:
             lines.append(f"Access Mode VLAN: {port.vlan}")
             lines.append("Trunking Native Mode VLAN: 1")
             lines.append("Voice VLAN: none")
+            lines.append(
+                f"Portfast: {'Enabled' if self.port_portfast_enabled(port.name) else 'Disabled'}"
+            )
             lines.append("")
         if not lines:
             return "<no interfaces>"
@@ -508,6 +541,10 @@ class EthernetSwitch:
             lines.append("no ip domain-lookup")
         if self.default_gateway:
             lines.append(f"ip default-gateway {self.default_gateway}")
+        if self.stp_mode != "rapid-pvst":
+            lines.append(f"spanning-tree mode {self.stp_mode}")
+        for vlan_id, priority in sorted(self.stp_vlan_priority.items()):
+            lines.append(f"spanning-tree vlan {vlan_id} priority {priority}")
         for account in sorted(self.user_accounts.values(), key=lambda a: a.username):
             lines.append(
                 f"username {account.username} privilege {account.privilege} secret {account.secret}"
@@ -526,6 +563,8 @@ class EthernetSwitch:
                 lines.append(f" description {port.description}")
             lines.append(f" switchport mode {port.mode}")
             lines.append(f" switchport access vlan {port.vlan}")
+            if self.port_portfast_enabled(port.name):
+                lines.append(" spanning-tree portfast")
             lines.append(" shutdown" if not port.admin_up else " no shutdown")
             lines.append("!")
         for svi in sorted(self.vlan_interfaces.values(), key=lambda i: i.vlan):
@@ -585,6 +624,29 @@ class EthernetSwitch:
             )
         return "\n".join(lines)
 
+    def show_spanning_tree(self) -> str:
+        lines = [
+            f"Spanning tree enabled protocol {self.stp_mode.upper()}",
+        ]
+        vlan_ids = sorted(self.vlans.keys())
+        if not vlan_ids:
+            vlan_ids = [1]
+        for vlan_id in vlan_ids:
+            vlan = self.vlans[vlan_id]
+            priority = self.stp_vlan_priority.get(vlan_id, 32768 + vlan_id)
+            lines.append(f"\nVLAN{vlan_id:04d}")
+            lines.append(f"  Bridge Identifier has priority {priority}")
+            portfast_ports = [
+                port for port in sorted(self._ports) if self.port_portfast_enabled(port)
+            ]
+            if portfast_ports:
+                lines.append("  Portfast enabled on:")
+                for port in portfast_ports:
+                    lines.append(f"    {port}")
+            else:
+                lines.append("  Portfast enabled on: <none>")
+        return "\n".join(lines)
+
     # ------------------------------------------------------------------
     # メンテナンスヘルパー
     # ------------------------------------------------------------------
@@ -620,7 +682,7 @@ class EthernetSwitch:
         raise ValueError(f"unknown interface: {name}")
 
     def _age_mac_table(self) -> None:
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         to_delete = [
             mac
             for mac, entry in self.mac_table.items()
@@ -631,7 +693,7 @@ class EthernetSwitch:
             self._log(f"Aged out {mac} from MAC table")
 
     def _log(self, message: str) -> None:
-        timestamp = datetime.utcnow().strftime("%H:%M:%S")
+        timestamp = datetime.now(UTC).strftime("%H:%M:%S")
         self.event_log.append(f"[{timestamp}] {message}")
 
 
@@ -801,6 +863,7 @@ class SwitchCLI:
             ["show", "vlan"],
             ["show", "vlan", "brief"],
             ["show", "vlan", "id", "<vlan>"],
+            ["show", "spanning-tree"],
         ]
         return commands
 
@@ -831,6 +894,8 @@ class SwitchCLI:
             ["interface", "<interface>"],
             ["interface", "range", "<range>"],
             ["interface", "vlan", "<vlan>"],
+            ["spanning-tree", "mode", "rapid-pvst"],
+            ["spanning-tree", "vlan", "<vlan>", "priority", "<priority>"],
             ["vlan", "<vlan>"],
             ["line", "console", "0"],
             ["line", "vty", "0", "4"],
@@ -847,6 +912,8 @@ class SwitchCLI:
             ["shutdown"],
             ["switchport", "mode", "access"],
             ["switchport", "access", "vlan", "<vlan>"],
+            ["spanning-tree", "portfast"],
+            ["no", "spanning-tree", "portfast"],
         ]
 
     def _interface_svi_command_templates(self) -> list[list[str]]:
@@ -991,6 +1058,8 @@ class SwitchCLI:
             return sorted(self.switch.user_accounts.keys())
         if placeholder == "<range>":
             return []
+        if placeholder == "<priority>":
+            return ["32768", "4096", "61440"]
         # テキストや任意引数は補完しない
         return []
 
@@ -1131,6 +1200,9 @@ class SwitchCLI:
         if self._match_command(command, "show logging") is not None:
             return self.switch.show_event_log()
 
+        if self._match_command(command, "show spanning-tree") is not None:
+            return self.switch.show_spanning_tree()
+
         if self._match_command(command, "show running-config") is not None:
             return self.switch.show_running_config()
 
@@ -1151,7 +1223,6 @@ class SwitchCLI:
 
         unsupported_patterns = [
             "show arp",
-            "show spanning-tree",
             "show spanning-tree vlan",
             "show spanning-tree summary",
             "show cdp neighbors",
@@ -1173,7 +1244,7 @@ class SwitchCLI:
         return None
 
     def _show_clock(self) -> str:
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         return now.strftime("*%H:%M:%S UTC %a %d %b %Y")
 
     def _show_history(self) -> str:
@@ -1298,6 +1369,40 @@ class SwitchCLI:
                 return "Usage: username <name> privilege <level> secret <password>"
             try:
                 self.switch.set_user_account(username, privilege, secret)
+            except ValueError as exc:
+                return f"% {exc}"
+            return ""
+
+        match = self._match_command(command, "spanning-tree mode", allow_suffix=True)
+        if match is not None:
+            remainder_tokens, _ = match
+            if len(remainder_tokens) != 1:
+                return "Usage: spanning-tree mode <mode>"
+            mode = remainder_tokens[0]
+            try:
+                self.switch.set_stp_mode(mode)
+            except ValueError as exc:
+                return f"% {exc}"
+            return ""
+
+        match = self._match_command(command, "spanning-tree vlan", allow_suffix=True)
+        if match is not None:
+            remainder_tokens, _ = match
+            if len(remainder_tokens) != 3:
+                return "Usage: spanning-tree vlan <id> priority <value>"
+            vlan_token, keyword, value = remainder_tokens
+            if not "priority".startswith(keyword.lower()):
+                return "Usage: spanning-tree vlan <id> priority <value>"
+            try:
+                vlan_id = int(vlan_token)
+            except ValueError:
+                return "% VLAN must be a numeric value"
+            try:
+                priority = int(value)
+            except ValueError:
+                return "% Priority must be numeric"
+            try:
+                self.switch.set_stp_vlan_priority(vlan_id, priority)
             except ValueError as exc:
                 return f"% {exc}"
             return ""
@@ -1469,6 +1574,20 @@ class SwitchCLI:
             try:
                 for iface in targets:
                     self.switch.set_port_mode(iface, "access")
+            except ValueError as exc:
+                return f"% {exc}"
+            return ""
+        if self._match_command(command, "spanning-tree portfast") is not None:
+            try:
+                for iface in targets:
+                    self.switch.set_port_portfast(iface, True)
+            except ValueError as exc:
+                return f"% {exc}"
+            return ""
+        if self._match_command(command, "no spanning-tree portfast") is not None:
+            try:
+                for iface in targets:
+                    self.switch.set_port_portfast(iface, False)
             except ValueError as exc:
                 return f"% {exc}"
             return ""

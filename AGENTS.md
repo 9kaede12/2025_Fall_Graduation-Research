@@ -55,6 +55,8 @@ python -m switch_sim.switch
 - `ip domain-lookup` / `no ip domain-lookup`
 - `ip default-gateway <ip>`
 - `username <user> privilege <level> secret <password>`
+- `spanning-tree mode rapid-pvst`
+- `spanning-tree vlan <id> priority <value>`
 - `interface <name>`
 - `interface range <start> - <end>`
 - `interface vlan <id>`
@@ -68,6 +70,8 @@ python -m switch_sim.switch
 - `shutdown` / `no shutdown`
 - `switchport access vlan <id>`
 - `switchport mode access`
+- `spanning-tree portfast`
+- `no spanning-tree portfast`
 - `exit`
 
 ### SVI 設定モード
@@ -90,6 +94,10 @@ python -m switch_sim.switch
 - `transport input ssh`（VTY のみ）
 - `exit`
 
+### Show コマンド関連
+
+- `show spanning-tree`
+
 ## 実装メモ
 
 - CLI は `_match_command` で短縮入力を解決し、`SwitchCLI._handle_*` 系メソッドでモード別処理を行います。
@@ -97,6 +105,7 @@ python -m switch_sim.switch
 - `EthernetSwitch` クラスが MAC 学習、VLAN 割り当て、イベントログ等のロジックを提供します。
 - VLAN インターフェースや line 設定も `EthernetSwitch` が保持し、`show running-config` をはじめ各種コマンドへ反映します。
 - VLAN 自体の定義（作成・名称）やインターフェース範囲設定も保持し、短縮入力と Tab 補完に対応しています。
+- STP（Rapid PVST）設定としてモード・VLAN プライオリティ・PortFast を保持し、`show spanning-tree` で確認できます。
 - `show running-config` や `show version` などは教材向けにシミュレーションされた出力を返します。
 - 実機で存在するが未実装のコマンド（例: `show arp`, `show spanning-tree`）は識別したうえで未対応メッセージを返します。
 - `readline`（libedit 含む）を利用して Tab 補完を提供し、曖昧時は候補語を一覧表示します。環境が補完に非対応の場合は自動的にフォールバックします。
