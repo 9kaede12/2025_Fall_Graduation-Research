@@ -19,7 +19,62 @@ python -m switch_sim.switch
 
 短縮形は一意であれば利用可能です（例: `sh mac`, `conf t`, `int fa0/1`）。
 
-### ユーザーモード
+### ルーターモード（router_sim）
+
+- `enable` / `disable`
+- `configure terminal`
+- `hostname <name>`
+- `enable secret <password>`
+- `service password-encryption` / `no service password-encryption`
+- `service timestamps log datetime` / `no service timestamps log datetime`
+- `ip domain-lookup` / `no ip domain-lookup`
+- `ip name-server <ip>` / `no ip name-server [<ip>]`
+- `banner motd #...#` / `no banner motd`
+- `clock timezone <zone> <offset>`
+- `router rip` / `no router rip`
+- `network <addr>` / `no network <addr>`
+- `version <1|2>`
+- `auto-summary` / `no auto-summary`
+- `router ospf <process-id>` / `no router ospf`
+- `router-id <ip>`
+- `network <ip> <wildcard> area <id>` / `no network <ip> <wildcard> area <id>`
+- `router bgp <asn>` / `no router bgp`
+- `neighbor <ip> remote-as <asn>` / `no neighbor <ip>`
+- `network <ip> mask <mask>` / `no network <ip> mask <mask>`
+- `ip nat pool <name> <start> <end> netmask <mask>` / `no ip nat pool <name>`
+- `ip nat inside source list <list> pool <name> [overload]` / `no ip nat inside source list <list> pool <name>`
+- `ip route <dest> <mask> <next-hop>` / `no ip route <dest> <mask> <next-hop>`
+- `interface <name>` (`GigabitEthernet0/0` など)
+- `ip address <address> <mask>` / `no ip address`
+- `shutdown` / `no shutdown`
+- `description <text>`
+- `ip nat inside`
+- `ip nat outside`
+- `no ip nat inside`
+- `no ip nat outside`
+- `show interfaces`
+- `show ip interface brief`
+- `show running-config`
+- `show version`
+- `show startup-config`
+- `show processes`
+- `show users`
+- `show arp`
+- `show ip route`
+- `show ip protocols`
+- `show ip ospf neighbor`
+- `show ip ospf database`
+- `show ip bgp`
+- `show ip nat translations`
+- `ping <ip|hostname>`
+- `traceroute <ip|hostname>`
+- `copy running-config startup-config`
+- `write memory`
+- `reload`
+- `clear arp-cache`
+- `exit` / `logout`
+
+ ### ユーザーモード
 
 - `enable`
 - `show interfaces`
@@ -109,6 +164,7 @@ python -m switch_sim.switch
 - `show running-config` や `show version` などは教材向けにシミュレーションされた出力を返します。
 - 実機で存在するが未実装のコマンド（例: `show arp`, `show spanning-tree`）は識別したうえで未対応メッセージを返します。
 - `readline`（libedit 含む）を利用して Tab 補完を提供し、曖昧時は候補語を一覧表示します。環境が補完に非対応の場合は自動的にフォールバックします。
+- ルーターシミュレータは `router_sim.router` モジュールから利用し、インターフェースやログ設定を `CiscoRouter`/`RouterCLI` で扱います。
 
 ## 拡張時のガイド
 

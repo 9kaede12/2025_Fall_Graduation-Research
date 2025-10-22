@@ -66,3 +66,54 @@ CLI は `Switch>` プロンプト（ユーザーモード）で起動し、`enab
 Tab キーで Cisco 風のコマンド補完が利用でき、曖昧な場合は候補語を表示します。
 
 `help` コマンドで使用可能なコマンド一覧を確認できます。
+
+## Router simulation (Python)
+
+ルーターシミュレータは Cisco IOS 風の CLI で基本的なインターフェース運用を学習できます。
+
+```bash
+python -m router_sim.router
+```
+
+### 主なコマンド
+
+- `enable` / `disable` – ユーザー/特権モードの切り替え
+- `configure terminal` – グローバル設定モードへ移行
+- `hostname <name>` – ルーター名を変更
+- `enable secret <password>` – 特権パスワードを設定
+- `service password-encryption` / `no service password-encryption` – パスワード表示の暗号化を制御
+- `service timestamps log datetime` / `no service timestamps log datetime` – ログ時刻の有効化/無効化
+- `ip domain-lookup` / `no ip domain-lookup` – DNS ルックアップ設定
+- `ip name-server <ip> [ip...]` / `no ip name-server [ip...]` – DNS サーバーを設定/削除
+- `banner motd #...#` – ログイン時バナーを設定
+- `clock timezone <zone> <offset>` – タイムゾーンを設定
+- `router rip` → `network <addr>` / `version <1|2>` / `no auto-summary` / `redistribute static` – RIP を設定
+- `router ospf <process-id>` → `router-id <ip>` / `network <ip> <wildcard> area <id>` / `redistribute static` – OSPF を設定
+- `router bgp <asn>` → `neighbor <ip> remote-as <asn>` / `network <ip> mask <mask>` / `redistribute static` – BGP を設定
+- `ip nat inside` / `ip nat outside` – インターフェースの NAT 役割を設定
+- `ip nat pool <name> <start> <end> netmask <mask>` / `no ip nat pool <name>` – NAT プールを設定
+- `ip nat inside source list <list> pool <name> [overload]` / `no ip nat inside source list <list> pool <name>` – NAT マッピングを設定
+- `ip route <dest> <mask> <next-hop>` / `no ip route <dest> <mask> <next-hop>` – 静的ルートの追加/削除
+- `interface <name>` – インターフェース設定モード (`GigabitEthernet0/0` などに対応)
+- `ip address <address> <mask>` / `no ip address` – IP アドレスの設定/削除
+- `shutdown` / `no shutdown` – インターフェースの無効化/有効化
+- `description <text>` – インターフェース説明の設定
+- `show interfaces` – 詳細なインターフェース情報
+- `show ip interface brief` – インターフェース概要
+- `show running-config` – 現在の設定
+- `show version` – ソフトウェア情報
+- `show startup-config` – 起動時設定（シミュレーションでは簡易表示）
+- `show processes` – 擬似プロセス情報
+- `show users` – 接続ユーザーの一覧
+- `show arp` – ARP テーブルを表示
+- `show ip route` – ルーティングテーブル（静的/RIP/OSPF/BGP を反映）
+- `show ip protocols` – 動作中のルーティングプロトコルを表示
+- `show ip ospf neighbor` / `show ip ospf database` – OSPF の状態を確認
+- `show ip bgp` – BGP ルーティングテーブルを確認
+- `show ip nat translations` – NAT プール/マッピングの概要を表示
+- `copy running-config startup-config` / `write memory` – 設定を保存（疑似動作）
+- `reload` – ルーターの再起動をシミュレート
+- `clear arp-cache` – 動的 ARP 項目をクリア
+- `ping <ip>` / `traceroute <ip>` – ICMP 疎通確認・経路確認を実行
+
+インターフェースには仮想 MAC アドレスが割り当てられ、管理状態と IP 情報が保持されます。短縮コマンドや Tab 補完にも対応しています。
