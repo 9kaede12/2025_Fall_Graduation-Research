@@ -1,5 +1,3 @@
-"""Simple network switch simulation package."""
+"""Educational Cisco switch simulator package scaffolding."""
 
-from .switch import EthernetSwitch, SwitchCLI, Frame
-
-__all__ = ["EthernetSwitch", "SwitchCLI", "Frame"]
+__all__ = []

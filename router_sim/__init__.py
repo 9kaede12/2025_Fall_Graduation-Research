@@ -1,8 +1,6 @@
-# Cisco ルーターシミュレーション用パッケージ
-#
-# 主要機能は router_sim.router モジュールで提供されます。
+"""Educational Cisco router simulator package."""
 
-from .router import RouterCLI, CiscoRouter
+from router_sim.router_core import CiscoRouter
+from router_sim.cli.dispatcher import RouterCLI
 
-__all__ = ["RouterCLI", "CiscoRouter"]
-
+__all__ = ["CiscoRouter", "RouterCLI"]
