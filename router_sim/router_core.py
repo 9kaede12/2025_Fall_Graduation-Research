@@ -88,6 +88,7 @@ class CiscoRouter:
         self.startup_config: Optional[str] = None
         self.vlans: set[int] = set()
         self.static_routes: set[StaticRoute] = set()
+        self.static_route_entries: list[tuple[str, str, str]] = []
         self.rip_enabled: bool = False
         self.rip_version: int = 2
         self.rip_auto_summary: bool = True
@@ -266,6 +267,9 @@ class CiscoRouter:
         if route in self.static_routes:
             raise ValueError("static route already exists")
         self.static_routes.add(route)
+        entry = (network.network_address.exploded, network.netmask.exploded, IPv4Address(next_hop).exploded)
+        if entry not in self.static_route_entries:
+            self.static_route_entries.append(entry)
         self._log(f"Static route {network} via {next_hop} added")
 
     def remove_static_route(self, destination: str, mask: str, next_hop: str) -> None:
@@ -276,6 +280,9 @@ class CiscoRouter:
         if route not in self.static_routes:
             raise ValueError("static route not found")
         self.static_routes.remove(route)
+        entry = (network.network_address.exploded, network.netmask.exploded, IPv4Address(next_hop).exploded)
+        if entry in self.static_route_entries:
+            self.static_route_entries.remove(entry)
         self._log(f"Static route {network} via {next_hop} removed")
 
     # ------------------------------------------------------------------
@@ -527,6 +534,83 @@ class CiscoRouter:
                 lines.append(entry)
         else:
             lines.append("  <none>")
+        return "\n".join(lines)
+
+    def show_version(self) -> str:
+        """Return basic version and system information."""
+
+        hostname = getattr(self, "name", "Router")
+        return (
+            f"\n{hostname} Simulator IOS Software, Version 15.2(4)M\n"
+            f"Compiled by Codex, {__name__}\n"
+            "System image file is 'flash:cisco_router_sim.bin'\n"
+            "Router uptime is simulated\n"
+        )
+
+    def show_running_config(self) -> str:
+        """Return a simplified running configuration for the router."""
+
+        lines: list[str] = []
+        lines.append(f"hostname {self.name}")
+        lines.append("!")
+        lines.append("interface configurations:")
+        for if_name in sorted(self._interfaces):
+            iface = self._interfaces[if_name]
+            lines.append(f" interface {if_name}")
+            if iface.ip_address and iface.subnet_mask:
+                lines.append(f"  ip address {iface.ip_address} {iface.subnet_mask}")
+            else:
+                lines.append("  no ip address")
+            lines.append("  no shutdown" if iface.admin_up else "  shutdown")
+            lines.append("!")
+        if self.static_routes:
+            lines.append("ip route entries:")
+            for route in sorted(
+                self.static_routes,
+                key=lambda r: (
+                    int(r.network.network_address),
+                    r.network.prefixlen,
+                    int(r.next_hop),
+                ),
+            ):
+                network_addr = route.network.network_address.exploded
+                netmask = route.network.netmask.exploded
+                next_hop = route.next_hop.exploded
+                lines.append(f" ip route {network_addr} {netmask} {next_hop}")
+        lines.append("end")
+        return "\n".join(lines)
+
+    def show_ip_route(self) -> str:
+        """Display the routing table, including static routes."""
+
+        lines = [
+            "Codes: C - connected, S - static, R - RIP, O - OSPF, B - BGP",
+            "",
+            "Gateway of last resort is not set",
+            "",
+        ]
+        if not self.static_route_entries:
+            lines.append("<no static routes>")
+            return "\n".join(lines)
+
+        for network, mask, next_hop in self.static_route_entries:
+            lines.append(f"S    {network} {mask} [1/0] via {next_hop}")
+        return "\n".join(lines)
+
+    def show_ip_interface_brief(self) -> str:
+        """Display a summary of all router interfaces and their IP status (Cisco IOS style)."""
+
+        lines = [
+            "Interface              IP-Address      OK? Method Status                Protocol"
+        ]
+        for if_name in sorted(self._interfaces):
+            iface = self._interfaces[if_name]
+            ip_addr = iface.ip_address or "unassigned"
+            status = "up" if iface.admin_up else "administratively down"
+            protocol = "up" if iface.admin_up else "down"
+            lines.append(
+                f"{if_name:<22}{ip_addr:<15}YES manual {status:<20}{protocol}"
+            )
         return "\n".join(lines)
 
     # ------------------------------------------------------------------

@@ -95,6 +95,17 @@ def handle_priv_exec(cli: "RouterCLI", command: str) -> str:
     if match_command(command, "write memory", allow_suffix=True) is not None:
         cli.router.save_startup_config()
         return "Building configuration...\n[OK]"
+    if match_command(command, "ip route", allow_suffix=True) is not None:
+        _, remainder = match_command(command, "ip route", allow_suffix=True)
+        tokens = remainder.split() if remainder else []
+        if len(tokens) == 3:
+            network, mask, next_hop = tokens
+            try:
+                cli.router.add_static_route(network, mask, next_hop)
+                return f"Static route {network}/{mask} via {next_hop} added"
+            except Exception as exc:  # pragma: no cover - defensive
+                return f"% {exc}"
+        return "% Usage: ip route <network> <mask> <next-hop>"
     if match_command(command, "reload") is not None:
         message = cli.router.reload()
         cli._mode = "user_exec"

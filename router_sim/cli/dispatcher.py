@@ -293,6 +293,8 @@ class RouterCLI:
             return self.router.show_ip_nat_translations()
         if match_command(command, "show ip protocols") is not None:
             return self.router.show_ip_protocols()
+        if match_command(command, "show ip route") is not None:
+            return self.router.show_ip_route()
         if match_command(command, "show version") is not None:
             return self.router.show_version()
         return None

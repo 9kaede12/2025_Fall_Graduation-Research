@@ -1,3 +1,6 @@
-"""Educational Cisco switch simulator package scaffolding."""
+"""Educational Cisco switch simulator package."""
 
-__all__ = []
+from switch_sim.switch_core import EthernetSwitch
+from switch_sim.modules.cli import SwitchCLI
+
+__all__ = ["EthernetSwitch", "SwitchCLI"]

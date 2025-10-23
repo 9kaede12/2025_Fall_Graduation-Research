@@ -180,12 +180,15 @@ def handle_config(cli: "RouterCLI", command: str) -> str:
         return ""
     match = match_command(command, "ip route", allow_suffix=True)
     if match is not None:
-        remainder_tokens, _ = match
-        if len(remainder_tokens) != 3:
-            return "Usage: ip route <destination> <mask> <next-hop>"
-        destination, mask, next_hop = remainder_tokens
+        _, remainder = match
+        tokens = remainder.split() if remainder else []
+        if not tokens:
+            tokens = match[0]
+        if len(tokens) != 3:
+            return "% Usage: ip route <network> <mask> <next-hop>"
+        network, mask, next_hop = tokens
         try:
-            cli.router.add_static_route(destination, mask, next_hop)
+            cli.router.add_static_route(network, mask, next_hop)
         except ValueError as exc:
             return f"% {exc}"
         return ""
